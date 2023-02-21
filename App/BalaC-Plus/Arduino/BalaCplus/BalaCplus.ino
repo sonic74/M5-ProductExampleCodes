@@ -14,6 +14,13 @@
 
 #include <M5StickCPlus.h>
 
+
+#include "OTAWebUpdater.h"
+
+#include "BluetoothSerial.h"
+BluetoothSerial SerialBT;
+
+
 #define LED      10
 #define N_CAL1   100
 #define N_CAL2   100
@@ -52,6 +59,9 @@ int16_t punchPwr, punchPwr2, punchDur, punchCountL = 0, punchCountR = 0;
 byte demoMode = 0;
 
 
+char buf[80];
+
+
 void imuInit();
 void resetMotor();
 void resetPara();
@@ -66,12 +76,9 @@ void getGyro();
 void checkButtonP();
 void calib2();
 void startDemo();
-void startDemo();
 void drive();
 void calDelay(int n);
-void startDemo();
 void sendStatus();
-void readGyro();
 void readGyro();
 
 
@@ -79,6 +86,8 @@ void setup() {
     pinMode(LED, OUTPUT);
     digitalWrite(LED, HIGH);
     M5.begin();
+    snprintf(buf, sizeof(buf), "millis()-time0 stand accX power ang");
+    if (serialMonitor) Serial.print(buf);
     Wire.begin(0, 26);  // SDA,SCL
     imuInit();
     M5.Axp.ScreenBreath(11);
@@ -95,6 +104,12 @@ void setup() {
 #else
     setMode(false);
 #endif
+
+
+setup_OTAWebUpdater();
+SerialBT.setPin("1111");
+SerialBT.begin("ESP32test");
+SerialBT.println(buf);
 }
 
 void loop() {
@@ -130,6 +145,11 @@ void loop() {
         dispBatVolt();
         if (serialMonitor) sendStatus();
     }
+
+
+loop_OTAWebUpdater();
+
+
     do time1 = millis();
     while (time1 - time0 < interval);
     time0 = time1;
@@ -176,10 +196,13 @@ void calib2() {
 
 void checkButtonP() {
     byte pbtn = M5.Axp.GetBtnPress();
-    if (pbtn == 2)
+    if (pbtn == 2) {
+        if (serialMonitor) Serial.println("pbtn == 2");
         calib1();  // short push
-    else if (pbtn == 1)
+    } else if (pbtn == 1) {
+        if (serialMonitor) Serial.println("pbtn == 1");
         setMode(true);  // long push
+    }
 }
 
 void calDelay(int n) {
@@ -364,18 +387,9 @@ void resetVar() {
 }
 
 void sendStatus() {
-    Serial.print(millis() - time0);
-    Serial.print(" stand=");
-    Serial.print(standing);
-    Serial.print(" accX=");
-    Serial.print(accXdata);
-    Serial.print(" power=");
-    Serial.print(power);
-    Serial.print(" ang=");
-    Serial.print(varAng);
-    Serial.print(", ");
-    Serial.print(millis() - time0);
-    Serial.println();
+    snprintf(buf, sizeof(buf), "%i %d %f %f %f", millis()-time0, standing, accXdata, power, varAng);
+    Serial.println(buf);
+    SerialBT.println(buf);
 }
 
 void imuInit() {
@@ -399,6 +413,3 @@ void dispBatVolt() {
     vBatt = M5.Axp.GetBatVoltage();
     M5.Lcd.printf("%4.2fv ", vBatt);
 }
-
-
-
