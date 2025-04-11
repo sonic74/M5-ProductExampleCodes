@@ -17,8 +17,13 @@
 
 #include "OTAWebUpdater.h"
 
-#include "BluetoothSerial.h"
+//#include "BluetoothSerial.h"
+#ifdef _BLUETOOTH_SERIAL_H_
 BluetoothSerial SerialBT;
+#else
+#include <XboxSeriesXControllerESP32_asukiaaa.hpp>
+XboxSeriesXControllerESP32_asukiaaa::Core xboxController;
+#endif
 
 
 #define LED      10
@@ -90,7 +95,7 @@ void setup() {
     if (serialMonitor) Serial.print(buf);
     Wire.begin(0, 26);  // SDA,SCL
     imuInit();
-    M5.Axp.ScreenBreath(11);
+    M5.Axp.ScreenBreath(100);
     M5.Lcd.setRotation(2);
     M5.Lcd.setTextFont(4);
     M5.Lcd.fillScreen(BLACK);
@@ -107,9 +112,13 @@ void setup() {
 
 
 setup_OTAWebUpdater();
+#ifdef _BLUETOOTH_SERIAL_H_
 SerialBT.setPin("1111");
 SerialBT.begin("ESP32test");
 SerialBT.println(buf);
+#else
+xboxController.begin();
+#endif
 }
 
 void loop() {
@@ -124,6 +133,8 @@ void loop() {
         aveAccZ   = aveAccZ * 0.9 + accZdata * 0.1;
         M5.Lcd.setCursor(30, 130);
         M5.Lcd.printf("%5.2f   ", -aveAccZ);
+    M5.Lcd.printf("\n\nm %4.2f\n", moveRate);
+    M5.Lcd.printf("s %4.2f\n", spinStep);
         if (abs(aveAccZ) > 0.9 && aveAbsOmg < 1.5) {
             calib2();
             if (demoMode == 1) startDemo();
@@ -148,6 +159,24 @@ void loop() {
 
 
 loop_OTAWebUpdater();
+#ifndef _BLUETOOTH_SERIAL_H_
+  xboxController.onLoop();
+  if (xboxController.isConnected()) {
+    if (xboxController.isWaitingForFirstNotification()) {
+//      Serial.println("waiting for first notification");
+    } else {
+      spinStep=(float)xboxController.xboxNotif.joyLHori/XboxControllerNotificationParser::maxJoy*2.0f-1.0f;
+      moveRate=(float)xboxController.xboxNotif.joyLVert/XboxControllerNotificationParser::maxJoy*2.0f-1.0f;
+      if(abs(spinStep)>0.1f) spinContinuous=true;
+      else spinContinuous=false;
+    }
+  } else {
+//    Serial.println("not connected");
+    if (xboxController.getCountFailedConnection() > 2) {
+//      ESP.restart();
+    }
+  }
+#endif
 
 
     do time1 = millis();
@@ -389,7 +418,9 @@ void resetVar() {
 void sendStatus() {
     snprintf(buf, sizeof(buf), "%i %d %f %f %f", millis()-time0, standing, accXdata, power, varAng);
     Serial.println(buf);
+#ifdef _BLUETOOTH_SERIAL_H_
     SerialBT.println(buf);
+#endif
 }
 
 void imuInit() {
